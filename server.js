@@ -140,14 +140,27 @@ Rules:
 // =============================
 app.post("/webhook", async (req, res) => {
   try {
+    console.log("🔥 WEBHOOK:", JSON.stringify(req.body, null, 2));
+
     const messageObj =
       req.body.entry?.[0]?.changes?.[0]?.value?.messages?.[0];
 
-    if (!messageObj) return res.sendStatus(200);
+    if (!messageObj) {
+      console.log("⚠️ No message received");
+      return res.sendStatus(200);
+    }
 
     const from = messageObj.from;
-    const userText = messageObj.text?.body?.trim() || "";
+    const userText = messageObj.text?.body?.trim();
 
+    console.log("📩 From:", from);
+    console.log("💬 Message:", userText);
+
+    if (!userText) return res.sendStatus(200);
+
+    // =============================
+    // SESSION INIT
+    // =============================
     if (!sessions[from]) {
       sessions[from] = { step: "start" };
     }
@@ -156,7 +169,7 @@ app.post("/webhook", async (req, res) => {
     let reply = "";
 
     // =============================
-    // 💬 FLOW
+    // FLOW
     // =============================
 
     if (user.step === "start") {
@@ -169,15 +182,19 @@ app.post("/webhook", async (req, res) => {
       if (userText === "1") {
         reply =
           "✨ Services:\n\n• Laser Hair Removal\n• HIFU\n• Acne / Pigmentation\n• Hair Regrowth\n\nReply 2 to book.";
-      } else if (userText === "2") {
+      } 
+      else if (userText === "2") {
         reply = "Great! Let's book your FREE consultation 😊\n\nWhat's your name?";
         user.step = "name";
-      } else if (userText === "3") {
+      } 
+      else if (userText === "3") {
         reply = "Pricing varies. Book FREE consultation.\n\nReply 2 to book.";
-      } else if (userText === "4") {
-        reply = "📍 Amritsar\n📞 +91 9056 978 703\n⏰ 10AM - 7PM";
-      } else {
-        reply = await askAI(userText); // 🤖 AI here
+      } 
+      else if (userText === "4") {
+        reply = "📍 Amritsar\n📞 +91 9056978703\n⏰ 10AM - 7PM";
+      } 
+      else {
+        reply = await askAI(userText);
       }
     }
 
@@ -197,8 +214,7 @@ app.post("/webhook", async (req, res) => {
       user.email =
         userText.toLowerCase() === "skip" ? "Not provided" : userText;
 
-      reply =
-        "Choose treatment:\n1. Laser\n2. HIFU\n3. Acne\n4. Hair";
+      reply = "Choose treatment:\n1. Laser\n2. HIFU\n3. Acne\n4. Hair";
       user.step = "treatment";
     }
 
@@ -231,11 +247,17 @@ app.post("/webhook", async (req, res) => {
       reply = await askAI(userText);
     }
 
+    console.log("🤖 Reply:", reply);
+
+    // =============================
+    // SEND MESSAGE
+    // =============================
     await sendMessage(from, reply);
+
     res.sendStatus(200);
 
   } catch (error) {
-    console.error("❌ Error:", error.response?.data || error.message);
+    console.error("❌ ERROR:", error.response?.data || error.message);
     res.sendStatus(500);
   }
 });
