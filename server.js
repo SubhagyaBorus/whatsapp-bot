@@ -4,187 +4,243 @@ const axios = require("axios");
 const app = express();
 app.use(express.json());
 
-// 🔐 YOUR CONFIG
+// =============================
+// 🔐 CONFIG
+// =============================
 const VERIFY_TOKEN = "mytoken123";
-const WHATSAPP_TOKEN = "EAAhWa8aFjp4BRPjOKP0QdGKF1weB1xJ9V1a44T4tMFjcv1XFXZBaZBli1knTLHsh2Gl8HZAalqWJMXxf4E0iretSdZBDHl0NPTpgXXbaak51ndXFUfLkZAHQuJlOaGatL7XSzHh4Yl4DKlEl5yng3tcHvgZBLYtHtSs0RJ8f56ND2iclArmfVj4PKZCgd6cX8kCNQZDZD";
+const WHATSAPP_TOKEN = "EAAhWa8aFjp4BRUZC6xUoumHV5cpBnRlfoTalLpTgkvH2XC0r5IXBh0w22OeTYoHZBCO5z56WD9sOUtwAaMfVP6maxJVCsdtOy67EEzpuyAyg7fVoDxXQFkC69E7eEXVX9GyjZBubN3NwssVkYMu8I856w8v1ZBNvrUJmG0bRq6N2FziYpROpEaCAadDu8FrBQcE7YqfqLdf8sDc9DUDlrKixWM7SuWmo4u9oMhQ4fNuRwFDsMQZBoUcxWNC6ZCXpxP8LZARGwSdIZCZCGRxBFyw8Hr4eTWPWrIfDILwZDZD";
 const PHONE_NUMBER_ID = "1057295160801843";
 const MISTRAL_API_KEY = "ZreBzUwSugnwehUYV3keOjJS6cPXeJup";
 
-// ✅ 1. Webhook verification (GET)
+// 📊 GOOGLE SHEET (Apps Script URL)
+const SHEET_WEBHOOK_URL = "https://script.google.com/macros/s/AKfycbzaT8oyZisRMMgc7ENjNZXXPauRCQRzxkwmD7eQKbihodG9Ux-QZ2JKgJNU4sAWlCgZ/exec";
+
+// 📲 OWNER NUMBER
+const OWNER_NUMBER = "917888344612";
+
+// =============================
+// 🧠 SESSION STORAGE
+// =============================
+const sessions = {};
+
+// =============================
+// ✅ VERIFY WEBHOOK
+// =============================
 app.get("/webhook", (req, res) => {
   const mode = req.query["hub.mode"];
   const token = req.query["hub.verify_token"];
   const challenge = req.query["hub.challenge"];
 
-  if (mode && token === VERIFY_TOKEN) {
+  if (mode === "subscribe" && token === VERIFY_TOKEN) {
     return res.status(200).send(challenge);
   }
   res.sendStatus(403);
 });
 
-// ✅ 2. Receive message (POST)
-app.post("/webhook", async (req, res) => {
+// =============================
+// 📩 SEND MESSAGE
+// =============================
+async function sendMessage(to, text) {
+  await axios.post(
+    `https://graph.facebook.com/v18.0/${PHONE_NUMBER_ID}/messages`,
+    {
+      messaging_product: "whatsapp",
+      to,
+      text: { body: text },
+    },
+    {
+      headers: {
+        Authorization: `Bearer ${WHATSAPP_TOKEN}`,
+        "Content-Type": "application/json",
+      },
+    }
+  );
+}
+
+// =============================
+// 📊 SAVE TO SHEET (FIXED)
+// =============================
+async function saveToSheet(data) {
   try {
-    const entry = req.body.entry?.[0];
-    const changes = entry?.changes?.[0];
-    const value = changes?.value;
-    const messageObj = value?.messages?.[0];
+    await axios.post(SHEET_WEBHOOK_URL, {
+      name: data.name,
+      phone: data.phone,
+      email: data.email,
+      treatment: data.treatment,
+      concern: data.concern,
+    });
 
-    if (!messageObj) return res.sendStatus(200);
+    console.log("✅ Saved to Google Sheet");
+  } catch (error) {
+    console.error("❌ Sheet Error:", error.message);
+  }
+}
 
-    const userMessage = messageObj.text?.body;
-    const from = messageObj.from;
+// =============================
+// 📲 NOTIFY OWNER
+// =============================
+async function notifyOwner(data) {
+  const message = `🔥 New Booking
 
-    console.log("User:", userMessage);
+👤 Name: ${data.name}
+📞 Phone: ${data.phone}
+📧 Email: ${data.email}
+💆 Treatment: ${data.treatment}
+📝 Concern: ${data.concern}`;
 
-    let reply = "";
+  await sendMessage(OWNER_NUMBER, message);
+}
 
-    // 🔥 MENU SYSTEM
-    if (!userMessage) {
-      return res.sendStatus(200);
-    }
-
-    const msg = userMessage.toLowerCase();
-
-    if (msg === "hi" || msg === "hello") {
-      reply = `Hey 👋 Welcome to AiChatBot Services 🚀
-
-We offer:
-1️⃣ Mobile App Development 📱  
-2️⃣ Website Development 🌐  
-3️⃣ AI Chatbots 🤖  
-4️⃣ UI/UX Design 🎨  
-5️⃣ Video Editing 🎬  
-
-👉 Type a number to know more
-👉 Or ask anything 😊`;
-    }
-
-    else if (msg === "1") {
-      reply = `📱 Mobile App Development
-
-✔ Android & iOS apps  
-✔ Flutter apps  
-✔ Backend APIs  
-
-💰 Starting from ₹10,000  
-
-Interested? Reply YES 👍`;
-    }
-
-    else if (msg === "2") {
-      reply = `🌐 Website Development
-
-✔ Business websites  
-✔ E-commerce  
-✔ Admin panels  
-
-💰 Starting from ₹5,000  
-
-Interested? Reply YES 👍`;
-    }
-
-    else if (msg === "3") {
-      reply = `🤖 AI Chatbot Services
-
-✔ WhatsApp bots  
-✔ Website bots  
-✔ Automation  
-
-💰 Starting from ₹8,000  
-
-Interested? Reply YES 👍`;
-    }
-
-    else if (msg === "4") {
-      reply = `🎨 UI/UX Design
-
-✔ App UI  
-✔ Website UI  
-✔ Figma designs  
-
-💰 Starting from ₹3,000  
-
-Interested? Reply YES 👍`;
-    }
-
-    else if (msg === "5") {
-      reply = `🎬 Video Editing
-
-✔ Reels & Shorts  
-✔ YouTube videos  
-✔ Ads  
-
-💰 Starting from ₹1,000  
-
-Interested? Reply YES 👍`;
-    }
-
-    else if (msg === "yes") {
-      reply = `Great! 🎉
-
-Please share:
-📛 Your Name  
-📱 Your Requirement  
-
-Our team will contact you soon 😊`;
-    }
-
-    else {
-      // 🤖 AI fallback (SMART SELLING)
-      const aiResponse = await axios.post(
-        "https://api.mistral.ai/v1/chat/completions",
-        {
-          model: "mistral-small",
-          messages: [
-            {
-              role: "system",
-              content:
-                "You are a smart business assistant selling services like mobile apps, websites, AI chatbots, UI design, and video editing. Always try to convert user into a client."
-            },
-            { role: "user", content: userMessage }
-          ]
-        },
-        {
-          headers: {
-            Authorization: `Bearer ${MISTRAL_API_KEY}`,
-            "Content-Type": "application/json"
-          }
-        }
-      );
-
-      reply =
-        aiResponse.data.choices[0].message.content ||
-        "Sorry, I didn’t understand.";
-    }
-
-    console.log("Bot:", reply);
-
-    // 📩 Send reply to WhatsApp
-    await axios.post(
-      `https://graph.facebook.com/v18.0/${PHONE_NUMBER_ID}/messages`,
+// =============================
+// 🤖 AI FUNCTION (IMPROVED)
+// =============================
+async function askAI(message) {
+  try {
+    const res = await axios.post(
+      "https://api.mistral.ai/v1/chat/completions",
       {
-        messaging_product: "whatsapp",
-        to: from,
-        text: { body: reply }
+        model: "mistral-small",
+        messages: [
+          {
+            role: "system",
+            content: `
+You are a smart assistant for Lumina Laser Beauty clinic.
+
+Services:
+- Laser Hair Removal
+- HIFU Skin Tightening
+- Acne / Pigmentation
+- Hair Regrowth
+
+Rules:
+- Keep answers short
+- Be friendly
+- Guide user to book consultation
+            `,
+          },
+          { role: "user", content: message },
+        ],
       },
       {
         headers: {
-          Authorization: `Bearer ${WHATSAPP_TOKEN}`,
-          "Content-Type": "application/json"
-        }
+          Authorization: `Bearer ${MISTRAL_API_KEY}`,
+          "Content-Type": "application/json",
+        },
       }
     );
 
+    return res.data.choices[0].message.content;
+  } catch (e) {
+    return "Sorry, I couldn't understand that.";
+  }
+}
+
+// =============================
+// 🚀 MAIN WEBHOOK
+// =============================
+app.post("/webhook", async (req, res) => {
+  try {
+    const messageObj =
+      req.body.entry?.[0]?.changes?.[0]?.value?.messages?.[0];
+
+    if (!messageObj) return res.sendStatus(200);
+
+    const from = messageObj.from;
+    const userText = messageObj.text?.body?.trim() || "";
+
+    if (!sessions[from]) {
+      sessions[from] = { step: "start" };
+    }
+
+    const user = sessions[from];
+    let reply = "";
+
+    // =============================
+    // 💬 FLOW
+    // =============================
+
+    if (user.step === "start") {
+      reply =
+        "Hi 👋 I'm Lumina Assistant.\n\nWe offer FREE consultation.\n\nChoose:\n1️⃣ Services\n2️⃣ Book Consultation\n3️⃣ Pricing\n4️⃣ Location";
+      user.step = "menu";
+    }
+
+    else if (user.step === "menu") {
+      if (userText === "1") {
+        reply =
+          "✨ Services:\n\n• Laser Hair Removal\n• HIFU\n• Acne / Pigmentation\n• Hair Regrowth\n\nReply 2 to book.";
+      } else if (userText === "2") {
+        reply = "Great! Let's book your FREE consultation 😊\n\nWhat's your name?";
+        user.step = "name";
+      } else if (userText === "3") {
+        reply = "Pricing varies. Book FREE consultation.\n\nReply 2 to book.";
+      } else if (userText === "4") {
+        reply = "📍 Amritsar\n📞 +91 9056 978 703\n⏰ 10AM - 7PM";
+      } else {
+        reply = await askAI(userText); // 🤖 AI here
+      }
+    }
+
+    else if (user.step === "name") {
+      user.name = userText;
+      reply = `Nice to meet you, ${user.name} 😊\n\nEnter your phone:`;
+      user.step = "phone";
+    }
+
+    else if (user.step === "phone") {
+      user.phone = userText;
+      reply = "Enter email (or type skip):";
+      user.step = "email";
+    }
+
+    else if (user.step === "email") {
+      user.email =
+        userText.toLowerCase() === "skip" ? "Not provided" : userText;
+
+      reply =
+        "Choose treatment:\n1. Laser\n2. HIFU\n3. Acne\n4. Hair";
+      user.step = "treatment";
+    }
+
+    else if (user.step === "treatment") {
+      const map = {
+        "1": "Laser Hair Removal",
+        "2": "HIFU",
+        "3": "Acne",
+        "4": "Hair Regrowth",
+      };
+
+      user.treatment = map[userText] || userText;
+      reply = "Any concern? (or skip)";
+      user.step = "concern";
+    }
+
+    else if (user.step === "concern") {
+      user.concern =
+        userText.toLowerCase() === "skip" ? "None" : userText;
+
+      await saveToSheet(user);
+      await notifyOwner(user);
+
+      reply = "✅ Done! We’ll call you within 2 hours.";
+
+      delete sessions[from];
+    }
+
+    else {
+      reply = await askAI(userText);
+    }
+
+    await sendMessage(from, reply);
     res.sendStatus(200);
+
   } catch (error) {
-    console.log("Error:", error.response?.data || error.message);
+    console.error("❌ Error:", error.response?.data || error.message);
     res.sendStatus(500);
   }
 });
 
-// 🚀 Start server
+// =============================
 app.listen(3000, () => {
-  console.log("Server running on port 3000");
+  console.log("🚀 Server running");
 });
-
